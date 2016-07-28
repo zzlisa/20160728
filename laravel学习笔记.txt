@@ -1,0 +1,166 @@
+19后台登录模板引入
+    将sever.php重命名为index.php
+    将public文件夹中的.htaccess文件导入到blog文件夹下
+	(域名的配置)
+	配置数据库前缀  config->database.php 加上前缀 'prefix' => env('DB_PREFIX', ''),
+	在.env中加上DB_PREFIX=blog_
+	新建控制器测试数据库  控制器中DB::的命名空间use Illuminate\Support\Facades\DB
+	新建数据库，修改.env文件
+	
+	做后台登录页面，配置login路由，新建login控制器，放在admin文件夹下
+	继承的controller新建一个公用的控制器
+	common控制器 use App\Http\Controllers\Controller; 修改命名空间
+	login方法返回view(admin.login)
+	将模板文件放在views文件夹下 将login.html重命名为login.blade.php
+	修改css路径{{asset(路径名称)}}
+
+20引入验证码类及session处理
+    
+	分配验证码路由   引入第三方路由
+	reaources文件夹下建一个org文件夹，放入验证码
+	将验证码引入到login控制器中  require_once 'resources/org/code/Code.class.php';
+	调用验证码中的code方法   $code = new \Code;命名空间未加载，加上'\'表示去最底层找
+	到入口文件index.php中开启session   session_start();
+	将验证码调用到login模板中 {{url('admin/code')}}
+	<img src="{{url('admin/code')}}" alt="" onclick="this.src='{{url('admin/code')}}?'+Math.random()">
+	每次点击刷新 加一个onclick
+
+21登录表单提交csrf认证及验证码判断
+    用Input::方法来获取提交的数据 替代了IS_POST()方法  命名空间：use Illuminate\Support\Facades\Input;
+	{{csrf_field()}} 在login.blade.php中加上csrf的token值
+	返回当前页面back();
+	验证验证码，存到了session,需要加验证
+	        @if(session('msg'))
+			<p style="color:red">{{session('msg')}}</p>
+			@endif
+			验证验证码
+            $code = new \Code;
+            $_code = $code->get();
+            if($input['code'] != $_code){
+                return back()->with('msg', '验证码错误');
+            }
+	strtoupper()将输入的字母转换为大写字母，使验证码输入不用区分大小写
+
+22后台登录密码crypt加密和解密
+    分配路由crypt
+	方法Crypt::  命名空间:use Illuminate\Support\Facades\Crypt;
+	密码加密，抓取一次加密结果就可以进行解密
+	eyJpdiI6IkVuZ3FnZHNPWmUzQlpzcHZhSE0rTkE9PSIsInZhbHVlIjoiSHIwMkxIWStJ
+	QkxVdWhCTHR0ckJ1dz09IiwibWFjIjoiMTlhMWEyYzhiY2I4NTEwOGQyZmIwNDJiMDM4
+	ZTkzNTI2NmMzNjNkOWMzN2ZkYjQyMDlhYzA3MDA2ZWU5YTJjOSJ9
+	Crypt::encrypt加密   Crypt::decrypt解密
+	建立数据表 user_id user_name user_pass
+	登录需要与数据库对接，需要model 删除已有的user.php
+	创建model   php artisan make:model User
+	创建一个Model文件夹，与Controller放在同一级目录  将User模型放到文件夹
+	修改命名空间  namespace App\Http\Model;
+	User::all();取数据表中的所有数据
+	密码验证要先解密  Crypt::decrypt($user->user_pass) != $input['user_pass'])
+	将登录信息写入session，让其他页面也可以识别到信息
+	session(['user'=>$user]);
+	
+23后台首页、欢迎页面修改及子视图布局
+    配置路由index
+	分配模板 index.blade.php  引用地址iframe src="{{url('admin/info')}}"
+	操作系统  {{PHP_OS}}
+	运行环境  {{$_SERVER['SERVER_SOFTWARE']}}
+	北京时间  <?php echo date('Y年m月d日 H时i分s秒')?>
+	配置一般都在config文件夹,修改时区需要修改配置 app.php下将时区改为'timezone' => 'PRC',
+	服务器域名/IP  {{$_SERVER['SERVER_NAME']}}
+	Host  {{$_SERVER['SERVER_ADDR']}}
+	将首页链接改为{{url('admin.info')}}
+	@yield('content')为子视图替换的区域   新建一个模板admin.blade.php将头尾复制过来
+	@extends('layouts.admin')//继承
+	@section('content')//传入替换区域的内容
+	@endsection
+	redirect()表示跳转
+
+24后台管理员登录中间件设置和注销登录
+    建立中间件，将index和info路由放进路由群组
+	再注册一个组admin.login  到kernel.php中注册一个中间件
+	再创建一个中间件
+	在中间件中判断session是否有数据 同时需要在login控制器方法中清掉session  session(['user'=>null]);
+	清掉session的过程就是退出的过程 退出方法
+	分布路由，，，退出
+	
+25后台超级管理员登录密码修改及validation验证
+    路由尽量不要全用any  将pass路由分配到index控制器
+	建立pass方法，把pass.html重命名为pass.blade.php并且继承子视图
+	在pass方法中进行判断  用Input::方法进行判断，，all()
+	写上csrf认证，将提交方法改为action
+	验证：Validator::引入服务 Validator中有make()方法，第一个参数：提交的数据
+	第二个参数：验证规则  第三个参数：提示信息(需要自己写)
+	'password'=>'required',密码不能为空
+	如果$validator中的passes方法通过，返回为真，否则，返回为假
+	use Illuminate\Support\Facades\Validator;
+	$validator->errors()->all()查看所有错误
+	confirmed匹配条件默认的规则  需要修改为password_confirmation
+	如果错误，提示错误信息，返回到页面，需要在页面添加
+	tab.html模板文件中有一个专门做提示信息的
+	判断原密码并解析
+	
+26数据库文章分类表的创建
+    原密码输入错误时会报错，需要完善  如果传过来是对象，all()方法输出错误，如果是字符串，直接输出
+	数据库文章分类
+	cate_id cate_name cate_title cate_keywords cate_description cate_view cate_order cate_pid 
+	
+27后台文章分类列表页模板导入及基本信息展示
+    文章分类应使用资源路由
+|        | POST                           | admin/category                 | admin.category.store   | App\Http\Controllers\Admin\CategoryController@store   | 
+web,web,admin.login |
+|        | GET|HEAD                       | admin/category                 | admin.category.index   | App\Http\Controllers\Admin\CategoryController@index   | 
+web,web,admin.login |
+|        | GET|HEAD                       | admin/category/create          | admin.category.create  | App\Http\Controllers\Admin\CategoryController@create  | 
+web,web,admin.login |
+|        | GET|HEAD                       | admin/category/{category}      | admin.category.show    | App\Http\Controllers\Admin\CategoryController@show    | 
+web,web,admin.login |
+|        | DELETE                         | admin/category/{category}      | admin.category.destroy | App\Http\Controllers\Admin\CategoryController@destroy | 
+web,web,admin.login |
+|        | PUT|PATCH                      | admin/category/{category}      | admin.category.update  | App\Http\Controllers\Admin\CategoryController@update  | 
+web,web,admin.login |
+|        | GET|HEAD                       | admin/category/{category}/edit | admin.category.edit    | App\Http\Controllers\Admin\CategoryController@edit    | 
+web,web,admin.login |
+
+在控制器中分别建立相应的方法
+php artisan route:list查看所有路由  跟数据库对接，需要插入一个模型
+Category::use App\Http\Model\Category;
+在数据库中添加数据，分别引入页面
+
+28后台文章分类页多级分类列表
+    插入分类项目，设置pid，与父级id对应
+	新建一个方法进行分类
+	第一步:打印出cate_name 新建数组，找出cate_pid=0的数据  将第二次遍历的pid与第一次相同的放在一起
+	将data传到页面中  $data[$m]["_cate_name"]前边加上_表示自定义的字段
+	分类函数getTree()   递归的内容自己去尝试。。。
+	项目要移植，需要做一些通用的设置 给一个默认值
+	 public function getTree($data, $field_name, $field_id='id', $field_pid='pid', $pid=0){
+        
+        $arr = array();
+        
+        foreach($data as $k=>$v){
+            if($v->$field_pid==$pid){
+                
+                $data[$k]["_".$field_name] = $data[$k][$field_name];
+                $arr[] = $data[$k];
+                foreach($data as $m=>$n){
+                    if($n->$field_pid == $v->$field_id){
+                        
+                        $data[$m]["_".$field_name] = '├-- '.$data[$m][$field_name];
+                        $arr[] = $data[$m];
+                    }
+                }
+            }
+        }
+        return $arr;
+    }
+	这个函数就可以移植了。。。
+	控制器是做模型和视图之间的对接  模型是处理数据的，函数应放在模型中
+	熟练和掌握是一个相辅相成的过程
+	
+29后台文章分类页Ajax异步修改分类排序
+    layer.layui.com
+	排序失败。。。
+	错误无法解决。。。
+	
+30后台文章分类添加模板分配及父级分类嵌套
+    凌乱中。。。
